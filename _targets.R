@@ -28,15 +28,27 @@ list(
   
   # Create Chromatin Assay, Seurat object and preprocess object
   tar_target(chrom_assay, create_chrom_assay(counts, frags_file)),
-  tar_target(
-    pbmc, 
-    create_seurat(chrom_assay, metadata) %>% 
-      get_annotation() %>% 
-      compute_qc() %>% 
-      modify_metadata()
+  tar_target(pbmc, 
+             create_seurat(chrom_assay, metadata) %>% 
+               get_annotation() %>% 
+               compute_qc() %>% 
+               modify_metadata()
   ),
   
   # Plot some qc
   tar_target(qc_plots, plot_qc(pbmc)),
-  tar_target(qc_violins, plot_qc_violins(pbmc))
+  tar_target(qc_violins, plot_qc_violins(pbmc)),
+  
+  # Create final Seurat object
+  tar_target(rna_data, load_rna_data(proc_rna_data)),
+  tar_target(pbmc_final,
+             qc_filter(pbmc) %>% 
+               normalize_and_reduce_dims() %>% 
+               cluster() %>% 
+               add_gene_activity() %>% 
+               label_transfer_from_rna_data(rna_data)
+  ),
+  
+  # Plot UMAPS of RNA and ATAC
+  tar_target(rna_atac_umaps, plot_rna_atac_umaps(pbmc_final, rna_data))
 )
