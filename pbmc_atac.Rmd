@@ -1,0 +1,378 @@
+---
+title: "Human PBMC scATAC-seq analysis"
+output: html_notebook
+---
+
+```{r}
+# Load libraries
+suppressPackageStartupMessages({
+  library(Signac)
+  library(Seurat)
+  library(GenomeInfoDb)
+  library(EnsDb.Hsapiens.v75)
+  library(patchwork)
+  library(tidyverse)
+  library(magrittr, include.only = "%<>%")
+})
+```
+
+### Pre-processing
+```{r}
+# Load peak matrix and metadata
+counts <- Read10X_h5("data/atac_v1_pbmc_10k_filtered_peak_bc_matrix.h5")
+metadata <- read.csv("data/atac_v1_pbmc_10k_singlecell.csv", header = TRUE, row.names = 1)
+```
+
+```{r}
+# Create ChromatinAssay
+chrom_assay <- 
+  CreateChromatinAssay(
+    counts = counts,
+    sep = c(":", "-"),
+    genome = "hg19",
+    fragments = "data/atac_v1_pbmc_10k_fragments.tsv.gz",
+    min.cells = 10,
+    min.features = 200
+  )
+```
+
+```{r}
+# Create Seurat object from chrom_assay and metadata
+(pbmc <- 
+  CreateSeuratObject(
+    counts = chrom_assay, 
+    assay = "peaks", 
+    meta.data = metadata
+  )
+)
+```
+
+```{r}
+pbmc@assays$peaks
+```
+
+```{r}
+GenomicRanges::granges(pbmc)
+```
+
+```{r}
+# extract gene annotations from EnsDb
+annotations <- Signac::GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v75)
+```
+
+```{r}
+# change to UCSC style since the data was mapped to hg19
+GenomeInfoDb::seqlevelsStyle(annotations) <- "UCSC"
+```
+
+```{r}
+# add the gene information to the object
+Annotation(pbmc) <- annotations
+```
+### QC Metrics
+```{r}
+# Compute nucleosome signal score per cell
+# Quantify the approximate ratio of mononucleosomal to nucleosome-free fragments
+pbmc <- NucleosomeSignal(pbmc)
+```
+
+```{r}
+# Compute TSS enrichment score per cell
+# Score based on the ratio of fragments centered at the TSS to fragments in TSS-flanking regions
+# fast=TRUE will not allow plotting of the TSS enrichment signal for different groups of cells
+pbmc <- TSSEnrichment(pbmc, fast = FALSE)
+```
+
+```{r}
+# add blacklist ratio and fraction of reads in peaks
+pbmc@meta.data %<>% 
+  mutate(
+    pct_reads_in_peaks = peak_region_fragments / passed_filters * 100,
+    blacklist_ratio = blacklist_region_fragments / peak_region_fragments
+  )
+```
+
+```{r}
+# Add high.tss to metadata
+pbmc@meta.data %<>% 
+  mutate(high_tss = if_else(TSS.enrichment > 2, "High", "Low"))
+```
+
+```{r}
+# Plot TSS enrichment
+TSSPlot(pbmc, group.by = "high_tss")
+```
+
+```{r}
+# Add nucleosome.group to metadata
+pbmc@meta.data %<>% 
+  mutate(nucleosome_group = if_else(nucleosome_signal > 4, "NS > 4", "NS < 4"))
+```
+
+```{r}
+# Plot nucleosome banding pattern
+FragmentHistogram(pbmc, group.by = "nucleosome_group")
+```
+
+```{r, fig.width=12}
+VlnPlot(
+  object = pbmc,
+  features = c(
+    'pct_reads_in_peaks', 
+    'peak_region_fragments',
+    'TSS.enrichment', 
+    'blacklist_ratio', 
+    'nucleosome_signal'
+    ),
+  pt.size = 0.1,
+  ncol = 5
+)
+```
+
+```{r}
+# Filter data based on sensible QC metrics
+pbmc %<>% 
+  subset(
+    peak_region_fragments > 3000 &
+    peak_region_fragments < 20000 &
+    pct_reads_in_peaks > 15 &
+    blacklist_ratio < 0.05 &
+    nucleosome_signal < 4 &
+    TSS.enrichment > 2
+)
+```
+
+### Normalization and linear dimensional reduction
+```{r}
+# Frequency-inverse document frequency (TF-IDF) normalization
+# Feature selection
+# Singular value decomposition (SVD)
+pbmc %<>%
+  RunTFIDF() %>% 
+  FindTopFeatures(min.cutoff = 'q0') %>% 
+  RunSVD()
+```
+
+```{r}
+# Check correlation between depth and reduced dim components
+DepthCor(pbmc)
+```
+
+### Clustering
+```{r}
+# Cluster
+pbmc %<>% 
+  RunUMAP(reduction = 'lsi', dims = 2:30) %>% 
+  FindNeighbors(reduction = 'lsi', dims = 2:30) %>% 
+  FindClusters(verbose = FALSE, algorithm = 3)
+```
+
+```{r}
+# Plot UMAP
+DimPlot(pbmc, label = TRUE)
+```
+
+### Gene activity matrix - simple approach 
+
+```{r}
+# Quantify the activity of each gene by assessing the accessibility associated with each gene
+# Extract gene coordinates and extend them to include the 2 kb upstream region 
+# Count the number of fragments for each cell that map to each of these regions
+# Summing the fragments intersecting the gene body and promoter region
+gene.activities <- GeneActivity(pbmc)
+```
+
+```{r}
+# Check results
+head(gene.activities)
+```
+
+```{r}
+# Add the gene activity matrix to the Seurat object as a new assay and normalize it
+pbmc[['RNA']] <- CreateAssayObject(gene.activities)
+pbmc <- 
+  NormalizeData(
+  pbmc,
+  assay = 'RNA',
+  normalization.method = 'LogNormalize',
+  scale.factor = median(pbmc$nCount_RNA)
+)
+```
+
+```{r}
+# Plot some genes, note that we make 'RNA' the default assay
+DefaultAssay(pbmc) <- 'RNA'
+
+FeaturePlot(
+  pbmc, 
+  c('MS4A1', 'CD3D', 'LEF1', 'NKG7', 'TREM1', 'LYZ'),
+  pt.size = 0.1,
+  max.cutoff = 'q95',
+  ncol = 3, 
+)
+```
+
+### integrating with scRNA-seq data
+
+We can classify cells based on an scRNA-seq experiment from the same biological system.
+We aim to identify shared correlation patterns in the gene activity matrix and scRNA-seq 
+dataset to identify matched biological states across the two modalities. This procedure 
+returns a classification score for each cell for each scRNA-seq-defined cluster label.
+
+```{r}
+# Load PBMC_10k_v3 scRNA-seq data
+(pbmc_rna <- 
+  readr::read_rds("data/pbmc_10k_v3.rds") %>% 
+  UpdateSeuratObject())
+```
+
+```{r}
+# Label transfer
+transfer.anchors <- 
+  FindTransferAnchors(
+  reference = pbmc_rna,
+  query = pbmc,
+  reduction = 'cca'
+)
+
+predicted.labels <- 
+  TransferData(
+  anchorset = transfer.anchors,
+  refdata = pbmc_rna$celltype,
+  weight.reduction = pbmc[['lsi']],
+  dims = 2:30
+)
+```
+
+```{r}
+# Add predicted labels to scATAC pbmc metadata
+pbmc <- AddMetaData(pbmc, metadata = predicted.labels)
+```
+
+```{r}
+(DimPlot(
+  object = pbmc_rna,
+  group.by = 'celltype',
+  label = TRUE,
+  repel = TRUE) + NoLegend() + ggtitle('scRNA-seq')) +
+
+(DimPlot(
+  object = pbmc,
+  group.by = 'predicted.id',
+  label = TRUE,
+  repel = TRUE) + NoLegend() + ggtitle('scATAC-seq'))
+```
+
+```{r}
+# Drop cluster 14 (likely low quality cells) and rename clusters
+pbmc %<>% 
+  subset(idents = 14, invert = TRUE) %>%  # Note the 'invert' to drop the selected idents
+  RenameIdents(
+  '0' = 'CD14 Mono',
+  '1' = 'CD4 Memory',
+  '2' = 'CD8 Effector',
+  '3' = 'CD4 Naive',
+  '4' = 'CD14 Mono',
+  '5' = 'DN T',
+  '6' = 'CD8 Naive',
+  '7' = 'NK CD56Dim',
+  '8' = 'pre-B',
+  '9' = 'CD16 Mono',
+  '10' = 'pro-B',
+  '11' = 'DC',
+  '12' = 'NK CD56bright',
+  '13' = 'pDC'
+)
+```
+
+### Find differentially accessible peaks between clusters
+
+We utilize logistic regression for DA, and add the total number of fragments as 
+a latent variable to mitigate the effect of differential sequencing depth on the result. 
+For sparse data (such as scATAC-seq), it is often necessary to lower the min.pct threshold in FindMarkers() from the default (0.1, which was designed for scRNA-seq data).
+
+```{r}
+# Differential accessibility
+DefaultAssay(pbmc) <- 'peaks' # change back to working with peaks instead of gene activities
+
+da_peaks <- 
+  FindMarkers(
+  pbmc,
+  ident.1 = "CD4 Naive",
+  ident.2 = "CD14 Mono",
+  test.use = 'LR',
+  latent.vars = 'peak_region_fragments'
+)
+```
+
+```{r}
+head(da_peaks)
+```
+
+```{r}
+(VlnPlot(
+  pbmc,
+  features = rownames(da_peaks)[1],
+  pt.size = 0.1,
+  idents = c("CD4 Naive", "CD14 Mono")
+)) |
+  (FeaturePlot(
+    pbmc,
+    features = rownames(da_peaks)[1],
+    pt.size = 0.1
+  ))
+```
+
+The fold change accessibility between two groups of cells can be much faster than running more sophisticated DA tests, but is not able to account for latent variables or perform any statistical test. However, this can still be a useful way to quickly explore data.
+
+```{r}
+# Get log2FC accessibility between two groups
+pbmc %>% 
+  FoldChange(ident.1 = "CD4 Naive", ident.2 = "CD14 Mono") %>% 
+  arrange(desc(abs(avg_log2FC))) %>% 
+  head(20)
+```
+
+```{r}
+# Peak coordinates can be difficult to interpret alone. 
+# We can find the closest gene to each of these peaks using the ClosestFeature()
+# We could follow up by doing GO enrichment analysis on the gene sets returned
+open_cd4naive <- da_peaks %>% filter(avg_log2FC > 3) %>% rownames()
+open_cd14mono <- da_peaks %>% filter(avg_log2FC < -3) %>% rownames()
+
+closest_genes_cd4naive <- ClosestFeature(pbmc, regions = open_cd4naive)
+closest_genes_cd14mono <- ClosestFeature(pbmc, regions = open_cd14mono)
+
+head(closest_genes_cd4naive)
+```
+
+```{r}
+head(closest_genes_cd14mono)
+```
+
+### Plotting genomic regions
+
+We can plot the frequency of Tn5 integration across regions of the genome for cells using the CoveragePlot() function. These represent pseudo-bulk accessibility tracks, where signal from all cells within a group have been averaged together to visualize the DNA accessibility in a region.
+
+```{r, fig.width=12}
+# set plotting order
+levels(pbmc) <- c("CD4 Naive","CD4 Memory","CD8 Naive","CD8 Effector","DN T","NK CD56bright","NK CD56Dim","pre-B",'pro-B',"pDC","DC","CD14 Mono",'CD16 Mono')
+
+CoveragePlot(
+  pbmc,
+  region = rownames(da_peaks)[1],
+  extend.upstream = 40000,
+  extend.downstream = 20000
+)
+```
+
+
+
+
+
+
+
+
+
+
+
