@@ -15,7 +15,7 @@ tar_option_set(
 )
 
 list(
-  # targets for data files
+  # download data files
   tar_target(peak_matrix_h5, get_peak_matrix_h5(), format = "file"),
   tar_target(metadata_csv, get_metadata_csv(), format = "file"),
   tar_target(frags_file, get_frags(), format = "file"),
