@@ -2,6 +2,5 @@ renv
 .Rhistory
 .Rprofile
 .Rproj.user
-targets-signac.Rproj
 _targets
 data

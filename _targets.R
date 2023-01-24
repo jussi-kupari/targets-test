@@ -9,8 +9,7 @@ tar_option_set(
     "GenomeInfoDb",
     "EnsDb.Hsapiens.v75",
     "patchwork",
-    "tidyverse",
-    "here"
+    "tidyverse"
   )
 )
 
