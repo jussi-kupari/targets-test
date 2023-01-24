@@ -15,17 +15,19 @@ tar_option_set(
 )
 
 list(
-  # target raw data, metadata, fragments
-  tar_target(raw_data, here("data", "atac_v1_pbmc_10k_filtered_peak_bc_matrix.h5"), format = "file"),
-  tar_target(meta, here("data", "atac_v1_pbmc_10k_singlecell.csv"), format = "file"),
-  tar_target(frags, here("data", "atac_v1_pbmc_10k_fragments.tsv.gz"), format = "file"),
+  # targets for data files
+  tar_target(peak_matrix_h5, get_peak_matrix_h5(), format = "file"),
+  tar_target(metadata_csv, get_metadata_csv(), format = "file"),
+  tar_target(frags_file, get_frags(), format = "file"),
+  tar_target(frags_indx, get_frags_indx(), format = "file"),
+  tar_target(proc_rna_data, get_proc_rna_data() , format = "file"),
   
-  # Load data
-  tar_target(counts, get_data(raw_data)),
-  tar_target(metadata, get_metadata(meta)),
+  # Load peak matrix and metadata
+  tar_target(counts, data_load(peak_matrix_h5)),
+  tar_target(metadata, metadata_load(metadata_csv)),
   
   # Create Chromatin Assay, Seurat object and preprocess object
-  tar_target(chrom_assay, create_chrom_assay(counts, frags)),
+  tar_target(chrom_assay, create_chrom_assay(counts, frags_file)),
   tar_target(
     pbmc, 
     create_seurat(chrom_assay, metadata) %>% 
@@ -38,4 +40,3 @@ list(
   tar_target(qc_plots, plot_qc(pbmc)),
   tar_target(qc_violins, plot_qc_violins(pbmc))
 )
-
