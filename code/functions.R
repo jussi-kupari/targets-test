@@ -78,7 +78,7 @@ get_annotation <- function(pbmc) {
 }
 
 compute_qc <- function(pbmc) {
-  pbmc <-NucleosomeSignal(pbmc)
+  pbmc <- NucleosomeSignal(pbmc)
   pbmc <- TSSEnrichment(pbmc, fast = FALSE)
 }
 
