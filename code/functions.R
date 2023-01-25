@@ -4,7 +4,7 @@ get_peak_matrix_h5 <-
   # return: <chr> (side effect: downloads file)
   function() {
   system(
-    "cd ./data; \
+    "mkdir -p data; cd ./data; \
     wget https://cf.10xgenomics.com/samples/cell-atac/1.0.1/atac_v1_pbmc_10k/atac_v1_pbmc_10k_filtered_peak_bc_matrix.h5"
     )
   fs::dir_ls("data") %>% 
@@ -18,7 +18,7 @@ get_metadata_csv <-
   # return: <chr> (side effect: downloads file)
   function() {
   system(
-    "cd ./data; \
+    "mkdir -p data; cd ./data; \
     wget https://cf.10xgenomics.com/samples/cell-atac/1.0.1/atac_v1_pbmc_10k/atac_v1_pbmc_10k_singlecell.csv"
   )
   fs::dir_ls("data") %>% 
@@ -32,7 +32,7 @@ get_frags <-
   # return: <chr> (side effect: downloads file)
   function() {
   system(
-    "cd ./data; \
+    "mkdir -p data; cd ./data; \
     wget https://cf.10xgenomics.com/samples/cell-atac/1.0.1/atac_v1_pbmc_10k/atac_v1_pbmc_10k_fragments.tsv.gz"
   )
   fs::dir_ls("data") %>% 
@@ -46,7 +46,7 @@ get_frags_indx <-
   # return: <chr> (side effect: downloads file)
   function() {
   system(
-    "cd ./data; \
+    "mkdir -p data; cd ./data; \
     wget https://cf.10xgenomics.com/samples/cell-atac/1.0.1/atac_v1_pbmc_10k/atac_v1_pbmc_10k_fragments.tsv.gz.tbi"
   )
   fs::dir_ls("data") %>% 
@@ -60,7 +60,7 @@ get_proc_rna_data <-
   # return: <chr> (side effect: downloads file)
   function() {
   system(
-    "cd ./data; wget https://signac-objects.s3.amazonaws.com/pbmc_10k_v3.rds"
+    "mkdir-p data; cd ./data; wget https://signac-objects.s3.amazonaws.com/pbmc_10k_v3.rds"
   )
   fs::dir_ls("data") %>% 
     str_subset("10k_v3.rds")
