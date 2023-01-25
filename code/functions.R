@@ -1,7 +1,7 @@
 get_peak_matrix_h5 <- 
   # Download .h5 peak matrix file
   # param: none 
-  # return: character vector
+  # return: <chr> (downloads file)
   function() {
   system(
     "cd ./data; \
@@ -15,7 +15,7 @@ get_peak_matrix_h5 <-
 get_metadata_csv <-
   # Download .csv metadata file
   # param: none 
-  # return: <chr> vector
+  # return: <chr> (downloads file)
   function() {
   system(
     "cd ./data; \
@@ -29,7 +29,7 @@ get_metadata_csv <-
 get_frags <-
   # Download .tsv.gz fragments file
   # param: none 
-  # return: <chr> vector 
+  # return: <chr> (downloads file)
   function() {
   system(
     "cd ./data; \
@@ -43,7 +43,7 @@ get_frags <-
 get_frags_indx <-
   # Download tsv.gz.tbi fragments index
   # param: none 
-  # return: <chr> vector
+  # return: <chr> (downloads file)
   function() {
   system(
     "cd ./data; \
@@ -57,7 +57,7 @@ get_frags_indx <-
 get_proc_rna_data <-
   # Download processed Seurat object .rds file
   # param: none 
-  # return: character vector
+  # return: <chr> (downloads file)
   function() {
   system(
     "cd ./data; wget https://signac-objects.s3.amazonaws.com/pbmc_10k_v3.rds"
