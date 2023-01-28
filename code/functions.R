@@ -1,20 +1,26 @@
 get_peak_matrix_h5 <- 
-  # Download .h5 peak matrix file
-  # ==> Filepath
   function() {
-  system(
-    "mkdir -p data; cd ./data; \
+    
+    #' Download .h5 peak matrix file
+    #' 
+    #' @return file path
+    
+    system(
+      "mkdir -p data; cd ./data; \
     wget https://cf.10xgenomics.com/samples/cell-atac/1.0.1/atac_v1_pbmc_10k/atac_v1_pbmc_10k_filtered_peak_bc_matrix.h5"
     )
-  fs::dir_ls("data") %>% 
-    str_subset(".h5")
-}
+    fs::dir_ls("data") %>% 
+      str_subset(".h5")
+  }
 
 
 get_metadata_csv <-
-  # Download .csv metadata file
-  # ==> Filepath 
   function() {
+    
+    #' Download .csv metadata file
+    #' 
+    #' @return file path
+    
   system(
     "mkdir -p data; cd ./data; \
     wget https://cf.10xgenomics.com/samples/cell-atac/1.0.1/atac_v1_pbmc_10k/atac_v1_pbmc_10k_singlecell.csv"
@@ -25,9 +31,12 @@ get_metadata_csv <-
 
 
 get_frags <-
-  # Download .tsv.gz fragments file
-  # ==> Filepath 
   function() {
+    
+    #' Download .tsv.gz fragments file
+    #' 
+    #' @return file path
+    
   system(
     "mkdir -p data; cd ./data; \
     wget https://cf.10xgenomics.com/samples/cell-atac/1.0.1/atac_v1_pbmc_10k/atac_v1_pbmc_10k_fragments.tsv.gz"
@@ -41,6 +50,11 @@ get_frags_indx <-
   # Download tsv.gz.tbi fragments index
   # ==> Filepath 
   function() {
+    
+    #' Download tsv.gz.tbi fragments index
+    #' 
+    #' @return file path
+    
   system(
     "mkdir -p data; cd ./data; \
     wget https://cf.10xgenomics.com/samples/cell-atac/1.0.1/atac_v1_pbmc_10k/atac_v1_pbmc_10k_fragments.tsv.gz.tbi"
@@ -51,9 +65,12 @@ get_frags_indx <-
 
 
 get_proc_rna_data <-
-  # Download processed Seurat object .rds file
-  # ==> Filepath 
   function() {
+    
+    #' Download processed Seurat object .rds file
+    #' 
+    #' @return file path
+    
   system(
     "mkdir-p data; cd ./data; wget https://signac-objects.s3.amazonaws.com/pbmc_10k_v3.rds"
   )
@@ -61,25 +78,39 @@ get_proc_rna_data <-
     str_subset("10k_v3.rds")
 }
 
-data_load <- 
-  # Loads h5 peak matrix
-  # Filepath ==> dgCMatrix
+
+data_load <-
   function(peak_matrix_h5) {
-  counts <- Read10X_h5(peak_matrix_h5)
-}
+    
+    #' Load h5 peak matrix
+    #' 
+    #' @param peak_matrix_h5 peak matrix file
+    #' @return dgCMatrix
+    
+    counts <- Read10X_h5(peak_matrix_h5)
+  }
 
 metadata_load <-
-  # Loads metadata
-  # Filepath ==> Data.frame
   function(metadata_csv) {
+    
+    #' Load metadata
+    #' 
+    #' @param metadata_csv file path
+    #' @return data.frame
+    
   metadata <- read.csv(metadata_csv, header = TRUE, row.names = 1)
 }
 
 
 create_chrom_assay <-
-  # Creates a Seurat Chromatin Assay
-  # dgCMatrix ==> ChromatinAssay
   function(counts, frags) {
+    
+    #' Create a Seurat Chromatin Assay
+    #' 
+    #' @param counts dgCMatrix
+    #' @param frags path to file
+    #' @return ChromatinAssay
+    
   chrom_assay <- 
     CreateChromatinAssay(
       counts = counts,
@@ -92,9 +123,14 @@ create_chrom_assay <-
 }
 
 create_seurat <- 
-  # Creates a Seurat object
-  # ChromatinAssay, Data.frame ==> SeuratObject
   function(chrom_assay, metadata) {
+    
+    #' Create Seurat object
+    #' 
+    #' @param chrom_assay ChromatinAssay
+    #' @param metadata data.frame
+    #' @return SeuratObject
+
   pbmc <- 
     CreateSeuratObject(
       counts = chrom_assay, 
@@ -105,9 +141,13 @@ create_seurat <-
 
 
 get_annotation <- 
-  # Downloads and adds genomic annotations
-  # SeuratObject ==> SeuratObject
   function(pbmc) {
+    
+    #' Download and add genomic annotations
+    #' 
+    #' @param pbmc SeuratObject
+    #' @return SeuratObject
+
   annotations <- Signac::GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v75)
   GenomeInfoDb::seqlevelsStyle(annotations) <- "UCSC"
   Annotation(pbmc) <- annotations
@@ -116,18 +156,26 @@ get_annotation <-
 
 
 compute_qc <- 
-  # Computes QC metrics
-  # SeuratObject ==> SeuratObject
   function(pbmc) {
+    
+    #' Compute QC metrics
+    #' 
+    #' @param pbmc SeuratObject
+    #' @return SeuratObject
+    
   pbmc <- NucleosomeSignal(pbmc)
   pbmc <- TSSEnrichment(pbmc, fast = FALSE)
 }
 
 
 modify_metadata <- 
-  # Calculates and adds new variables in metadata
-  # SeuratObject ==> SeuratObject
   function(pbmc) {
+    
+    #' Calculate and add new variables to metadata
+    #' 
+    #' @param pbmc SeuratObject
+    #' @return SeuratObject
+    
   pbmc@meta.data <-
     mutate(
       pbmc@meta.data,
@@ -141,9 +189,13 @@ modify_metadata <-
 
 
 plot_qc <- 
-  # Creates QC plots
-  # SeuratObject ==> SeuratObject
   function(pbmc) {
+    
+    #' Create QC plots
+    #' 
+    #' @param pbmc SeuratObject
+    #' @return ggplot
+    
   qc_plots <-
     list(
       TSSPlot(pbmc, group.by = "high_tss"),
@@ -153,9 +205,13 @@ plot_qc <-
 
 
 plot_qc_violins <- 
-  # Creates QC violin plots
-  # SeuratObject ==> ggplot
   function(pbmc) {
+    
+    #' Create QC violin plots
+    #' 
+    #' @param pbmc SeuratObject
+    #' @return ggplot
+    
   VlnPlot(
     object = pbmc,
     features = c(
@@ -171,10 +227,14 @@ plot_qc_violins <-
 }
 
 
-qc_filter <- 
-  # Filters data 
-  # SeuratObject ==> SeuratObject
+qc_filter <-
   function(pbmc) {
+    
+    #' Filter data 
+    #' 
+    #' @param pbmc SeuratObject 
+    #' @return SeuratObject
+  
   pbmc <- 
     subset(pbmc,
       peak_region_fragments > 3000 &
@@ -188,9 +248,13 @@ qc_filter <-
 
 
 normalize_and_reduce_dims <- 
-  # Normalizes data and reduces dimensions
-  # SeuratObject ==> SeuratObject
   function(pbmc) {
+    
+    #' Normalize data and reduce dimensions
+    #' 
+    #' @param pbmc SeuratObject
+    #' @return SeuratObject
+    
     pbmc <-
       RunTFIDF(pbmc) %>% 
       FindTopFeatures(min.cutoff = 'q0') %>% 
@@ -199,9 +263,13 @@ normalize_and_reduce_dims <-
 
 
 cluster <- 
-  # Clusters data
-  # SeuratObject ==> SeuratObject
   function(pbmc) {
+    
+    #' Cluster data
+    #' 
+    #' @param pbmc SeuratObject 
+    #' @return SeuratObject
+    
   pbmc <-
     RunUMAP(pbmc, reduction = 'lsi', dims = 2:30) %>% 
     FindNeighbors(reduction = 'lsi', dims = 2:30) %>% 
@@ -210,9 +278,13 @@ cluster <-
 
 
 add_gene_activity <- 
-  # Counts gene activity and add it to Seurat object
-  # SeuratObject ==> SeuratObject
   function(pbmc) {
+    
+    #' Count gene activity and add to Seurat object
+    #' 
+    #' @param pbmc SeuratObject
+    #' @return SeuratObject
+    
     gene.activities <- GeneActivity(pbmc)
     pbmc[['RNA']] <- CreateAssayObject(gene.activities)
     pbmc <- 
@@ -227,9 +299,13 @@ add_gene_activity <-
 
 
 load_rna_data <- 
-  # Loads processed RNA dataset
-  # FilePath ==> SeuratObject 
   function(proc_rna_data) {
+    
+    #' Load processed RNA data
+    #' 
+    #' @param proc_rna_data file path
+    #' @return SeuratObject
+ 
     rna_data <-
       readRDS(proc_rna_data) %>% 
       UpdateSeuratObject()
@@ -237,9 +313,12 @@ load_rna_data <-
   
 
 label_transfer_from_rna_data <- 
-  # Transfers labels from RNA data to ATAC data
-  # SeuratObject ==> SeuratObject
   function(pbmc, rna_data) {
+    
+    #' Transfer labels from RNA data to ATAC data
+    #' 
+    #' @param pbmc  SeuratObject
+    #' @return SeuratObject
     
     # Label transfer
     DefaultAssay(pbmc) <- 'RNA'
@@ -290,9 +369,14 @@ label_transfer_from_rna_data <-
 
 
 plot_rna_atac_umaps <- 
-  # Plots UMAPS of both RNA and ATAC data
-  # SeuratObject, SeuratObject ==> ggplot
   function(pbmc_final, rna_data) {
+    
+    #' Plot UMAPS of both RNA and ATAC data
+    #' 
+    #' @param pbmc SeuratObject
+    #' @param rna_data SeuratObject
+    #' @return ggplot
+    
   (DimPlot(
     object = rna_data,
     group.by = 'celltype',
